@@ -18,29 +18,32 @@ PuppetLint.new_check(:arrow_on_right_operand_line) do
 
   def fix(problem)
     token = problem[:token]
-    tokens.delete(token)
 
-    # remove any excessive whitespace on the line
-    temp_token = token.prev_code_token
-    while (temp_token = temp_token.next_token)
-      tokens.delete(temp_token) if whitespace?(temp_token)
-      break if temp_token.type == :NEWLINE
+    prev_code_token = token.prev_code_token
+    next_code_token = token.next_code_token
+    indent_token = prev_code_token.prev_token_of(:INDENT)
+
+    # Delete all tokens between the two code tokens the anchor is between
+    temp_token = prev_code_token
+    while (temp_token = temp_token.next_token) and (temp_token != next_code_token)
+      tokens.delete(temp_token) unless temp_token == token
     end
 
-    temp_token.next_token = token
-    token.prev_token = temp_token
-    index = tokens.index(token.next_code_token)
-    tokens.insert(index, token)
+    # Insert a newline and an indent before the arrow
+    index = tokens.index(token)
+    newline_token = PuppetLint::Lexer::Token.new(:NEWLINE, "\n", token.line, 0)
+    tokens.insert(index, newline_token)
+    if indent_token
+      tokens.insert(index + 1, indent_token)
+    end
 
-    whitespace_token = PuppetLint::Lexer::Token.new(:WHITESPACE, ' ', temp_token.line + 1, 3)
+    # Insert a space between the arrow and the following code token
+    index = tokens.index(token)
+    whitespace_token = PuppetLint::Lexer::Token.new(:WHITESPACE, ' ', token.line, 3)
     whitespace_token.prev_token = token
     token.next_token = whitespace_token
-    whitespace_token.next_token = tokens[index + 1]
-    tokens[index + 1].prev_token = whitespace_token
+    whitespace_token.next_token = token.next_code_token
+    token.next_code_token.prev_token = whitespace_token
     tokens.insert(index + 1, whitespace_token)
-  end
-
-  def whitespace?(token)
-    Set[:INDENT, :WHITESPACE].include?(token.type)
   end
 end
